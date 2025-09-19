@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -38,57 +38,39 @@ const navigation = [
 
 export function HiddenSidebar() {
   const [isVisible, setIsVisible] = useState(false)
-  const [mouseX, setMouseX] = useState(0)
+  const sidebarRef = useRef<HTMLDivElement>(null)
   const pathname = usePathname()
   const { user, signOut } = useAuth()
 
-  // Track mouse position for hover detection
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      setMouseX(e.clientX)
-      // Show sidebar when mouse is within 50px of left edge
-      setIsVisible(e.clientX < 50)
-    }
-
-    const handleMouseLeave = () => {
-      setIsVisible(false)
+      // Show sidebar when mouse is within 20px of left edge
+      if (e.clientX < 20 && !isVisible) {
+        setIsVisible(true)
+      }
     }
 
     document.addEventListener("mousemove", handleMouseMove)
-    document.addEventListener("mouseleave", handleMouseLeave)
 
     return () => {
       document.removeEventListener("mousemove", handleMouseMove)
-      document.removeEventListener("mouseleave", handleMouseLeave)
     }
-  }, [])
+  }, [isVisible])
 
   if (!user) return null
 
-  // Keep sidebar visible when hovering over it
-  const handleSidebarMouseEnter = () => {
-    setIsVisible(true)
-  }
-
   const handleSidebarMouseLeave = () => {
-    // Only hide if mouse is not near left edge
-    if (mouseX > 300) {
-      setIsVisible(false)
-    }
+    setIsVisible(false)
   }
 
   return (
     <>
-      {/* Hover trigger zone - invisible area on left edge */}
-      <div className="fixed left-0 top-0 w-12 h-full z-40 bg-transparent" onMouseEnter={() => setIsVisible(true)} />
-
-      {/* Sidebar overlay */}
       <div
+        ref={sidebarRef}
         className={cn(
-          "fixed left-0 top-0 h-full w-64 bg-background border-r shadow-lg z-50 transform transition-transform duration-300 ease-in-out",
+          "fixed left-0 top-0 h-full w-64 bg-background border-r shadow-xl z-50 transform transition-all duration-300 ease-out",
           isVisible ? "translate-x-0" : "-translate-x-full",
         )}
-        onMouseEnter={handleSidebarMouseEnter}
         onMouseLeave={handleSidebarMouseLeave}
       >
         <div className="flex h-full flex-col">
@@ -122,16 +104,6 @@ export function HiddenSidebar() {
             </nav>
           </div>
 
-          {/* Dashboard Button */}
-          <div className="px-4 pb-2">
-            <Link href="/dashboard">
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                <BarChart3 className="h-4 w-4 mr-2" />
-                Dashboard
-              </Button>
-            </Link>
-          </div>
-
           {/* User Profile Section */}
           <div className="border-t p-4">
             <div className="flex items-center gap-3 mb-3">
@@ -151,7 +123,7 @@ export function HiddenSidebar() {
         </div>
       </div>
 
-      {/* Background overlay when sidebar is visible */}
+      {/* Background overlay when sidebar is visible on mobile */}
       {isVisible && <div className="fixed inset-0 bg-black/20 z-40 lg:hidden" onClick={() => setIsVisible(false)} />}
     </>
   )

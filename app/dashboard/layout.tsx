@@ -1,5 +1,6 @@
 import type React from "react"
 import { HiddenSidebar } from "@/components/layout/hidden-sidebar"
+import { DashboardHeader } from "@/components/layout/dashboard-header"
 
 export default function DashboardLayout({
   children,
@@ -9,7 +10,10 @@ export default function DashboardLayout({
   return (
     <div className="flex h-screen bg-background relative">
       <HiddenSidebar />
-      <main className="flex-1 overflow-auto">{children}</main>
+      <div className="flex-1 flex flex-col">
+        <DashboardHeader />
+        <main className="flex-1 overflow-auto">{children}</main>
+      </div>
     </div>
   )
 }
