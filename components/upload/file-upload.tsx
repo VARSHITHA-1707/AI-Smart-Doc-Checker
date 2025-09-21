@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useDropzone } from "react-dropzone"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -9,14 +9,15 @@ import { Upload, File, X, CheckCircle, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface FileUploadProps {
-  onUpload: (files: File[]) => Promise<void>
+  onUploadComplete: () => void
   maxFiles?: number
   maxSize?: number
   acceptedTypes?: string[]
   disabled?: boolean
 }
 
-interface UploadFile extends File {
+interface UploadFile {
+  file: File
   id: string
   progress: number
   status: "pending" | "uploading" | "success" | "error"
@@ -24,28 +25,36 @@ interface UploadFile extends File {
 }
 
 export function FileUpload({
-  onUpload,
+  onUploadComplete,
   maxFiles = 5,
   maxSize = 10 * 1024 * 1024, // 10MB
-  acceptedTypes = [".pdf", ".doc", ".docx", ".txt"],
   disabled = false,
 }: FileUploadProps) {
   const [files, setFiles] = useState<UploadFile[]>([])
-  const [isUploading, setIsUploading] = useState(false)
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       const newFiles: UploadFile[] = acceptedFiles.map((file) => ({
-        ...file,
+        file: file,
         id: Math.random().toString(36).substring(7),
         progress: 0,
         status: "pending" as const,
       }))
-
-      setFiles((prev) => [...prev, ...newFiles].slice(0, maxFiles))
+      setFiles((prev) => [...prev, ...newFiles].slice(-maxFiles))
     },
     [maxFiles],
   )
+
+  useEffect(() => {
+    const uploadPendingFiles = async () => {
+      const pendingFiles = files.filter((f) => f.status === "pending")
+      if (pendingFiles.length > 0) {
+        await handleUpload(pendingFiles)
+      }
+    }
+    uploadPendingFiles()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -57,44 +66,59 @@ export function FileUpload({
     },
     maxSize,
     maxFiles,
-    disabled: disabled || isUploading,
+    disabled: disabled,
   })
 
   const removeFile = (id: string) => {
     setFiles((prev) => prev.filter((file) => file.id !== id))
   }
 
-  const handleUpload = async () => {
-    if (files.length === 0) return
+  const handleUpload = async (filesToUpload: UploadFile[]) => {
+    setFiles((prev) =>
+      prev.map((f) =>
+        filesToUpload.find((item) => item.id === f.id)
+          ? { ...f, status: "uploading" }
+          : f,
+      ),
+    )
 
-    setIsUploading(true)
-    const filesToUpload = files.filter((file) => file.status === "pending")
+    const formData = new FormData()
+    filesToUpload.forEach((uploadFile) => {
+      formData.append("files", uploadFile.file)
+    })
 
     try {
-      // Update files to uploading status
-      setFiles((prev) =>
-        prev.map((file) => (filesToUpload.includes(file) ? { ...file, status: "uploading" as const } : file)),
-      )
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
 
-      await onUpload(filesToUpload)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Upload failed")
+      }
 
-      // Update files to success status
       setFiles((prev) =>
-        prev.map((file) =>
-          filesToUpload.includes(file) ? { ...file, status: "success" as const, progress: 100 } : file,
+        prev.map((f) =>
+          filesToUpload.find((item) => item.id === f.id)
+            ? { ...f, status: "success", progress: 100 }
+            : f,
         ),
       )
+      onUploadComplete()
     } catch (error) {
-      // Update files to error status
       setFiles((prev) =>
-        prev.map((file) =>
-          filesToUpload.includes(file)
-            ? { ...file, status: "error" as const, error: error instanceof Error ? error.message : "Upload failed" }
-            : file,
+        prev.map((f) =>
+          filesToUpload.find((item) => item.id === f.id)
+            ? {
+                ...f,
+                status: "error",
+                error:
+                  error instanceof Error ? error.message : "Upload failed",
+              }
+            : f,
         ),
       )
-    } finally {
-      setIsUploading(false)
     }
   }
 
@@ -105,7 +129,9 @@ export function FileUpload({
       case "error":
         return <AlertCircle className="h-4 w-4 text-red-500" />
       case "uploading":
-        return <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        return (
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        )
       default:
         return <File className="h-4 w-4 text-muted-foreground" />
     }
@@ -119,17 +145,24 @@ export function FileUpload({
             {...getRootProps()}
             className={cn(
               "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
-              isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25",
-              disabled || isUploading ? "cursor-not-allowed opacity-50" : "hover:border-primary hover:bg-primary/5",
+              isDragActive
+                ? "border-primary bg-primary/5"
+                : "border-muted-foreground/25",
+              disabled
+                ? "cursor-not-allowed opacity-50"
+                : "hover:border-primary hover:bg-primary/5",
             )}
           >
             <input {...getInputProps()} />
             <Upload className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
             <p className="text-lg font-medium mb-2">
-              {isDragActive ? "Drop files here" : "Drag & drop files here, or click to select"}
+              {isDragActive
+                ? "Drop files here"
+                : "Drag & drop files here, or click to select"}
             </p>
             <p className="text-sm text-muted-foreground">
-              Supports PDF, DOC, DOCX, TXT files up to {Math.round(maxSize / 1024 / 1024)}MB
+              Supports PDF, DOC, DOCX, TXT files up to{" "}
+              {Math.round(maxSize / 1024 / 1024)}MB
             </p>
           </div>
         </CardContent>
@@ -139,26 +172,38 @@ export function FileUpload({
         <Card>
           <CardContent className="p-6">
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium">Selected Files ({files.length})</h3>
-                <Button onClick={handleUpload} disabled={isUploading || files.every((f) => f.status !== "pending")}>
-                  {isUploading ? "Uploading..." : "Upload Files"}
-                </Button>
-              </div>
-              {files.map((file) => (
-                <div key={file.id} className="flex items-center space-x-3 p-3 border rounded-lg">
-                  {getStatusIcon(file.status)}
+              <h3 className="font-medium">
+                Uploaded Files ({files.filter((f) => f.status === "success").length}/{files.length})
+              </h3>
+              {files.map((uploadFile) => (
+                <div
+                  key={uploadFile.id}
+                  className="flex items-center space-x-3 p-3 border rounded-lg"
+                >
+                  {getStatusIcon(uploadFile.status)}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                    {file.status === "uploading" && <Progress value={file.progress} className="mt-2 h-1" />}
-                    {file.status === "error" && file.error && <p className="text-xs text-red-500 mt-1">{file.error}</p>}
+                    <p className="text-sm font-medium truncate">
+                      {uploadFile.file.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {(uploadFile.file.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                    {uploadFile.status === "uploading" && (
+                      <Progress value={uploadFile.progress} className="mt-2 h-1" />
+                    )}
+                    {uploadFile.status === "error" && uploadFile.error && (
+                      <p className="text-xs text-red-500 mt-1">
+                        {uploadFile.error}
+                      </p>
+                    )}
                   </div>
-                  {file.status === "pending" && (
-                    <Button variant="ghost" size="sm" onClick={() => removeFile(file.id)}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeFile(uploadFile.id)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
               ))}
             </div>

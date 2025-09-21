@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/components/auth/auth-provider"
 import { Suspense } from "react"
 import "./globals.css"
+import { Toaster } from "@/components/ui/toaster"
 
 export const metadata: Metadata = {
   title: "Smart Doc Checker - AI-Powered Document Analysis",
@@ -24,6 +25,7 @@ export default function RootLayout({
         <Suspense fallback={<div>Loading...</div>}>
           <AuthProvider>{children}</AuthProvider>
         </Suspense>
+        <Toaster />
         <Analytics />
       </body>
     </html>

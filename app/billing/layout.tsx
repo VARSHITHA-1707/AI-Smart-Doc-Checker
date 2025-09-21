@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { StaticSidebar } from "@/components/layout/static-sidebar";
 
-export default function DashboardLayout({
+export default function BillingLayout({
   children,
 }: {
   children: React.ReactNode;
